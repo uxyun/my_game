@@ -12,7 +12,7 @@
   </style>
 </head>
 <body>
-  <h1>Blizzard-K</h1>
+  <h1>BlizzardK Shooting</h1>
   <p>左右タップで移動、自動で弾を発射。30秒でスコア勝負！</p>
   <div id="gameContainer"></div>
 
@@ -65,11 +65,28 @@
       this.time.addEvent({ delay: 500, callback: () => shootBullet(this), loop: true });
 
       this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
+enemies.runChildUpdate = true;
 
       bgm = this.sound.add('bgm', { loop: true, volume: 0.5 });
       bgm.play();
 
-      this.input.on('pointerdown', (pointer) => {
+      
+    let leftPressed = false;
+    let rightPressed = false;
+
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.x < 200) {
+        leftPressed = true;
+      } else {
+        rightPressed = true;
+      }
+    });
+
+    this.input.on('pointerup', () => {
+      leftPressed = false;
+      rightPressed = false;
+    });
+    
         if (pointer.x < 200) {
           player.setVelocityX(-200);
         } else {
@@ -82,7 +99,20 @@
       });
     }
 
+    
     function update() {
+      if (leftPressed) {
+        player.setVelocityX(-200);
+      } else if (rightPressed) {
+        player.setVelocityX(200);
+      } else if (cursors.left.isDown) {
+        player.setVelocityX(-200);
+      } else if (cursors.right.isDown) {
+        player.setVelocityX(200);
+      } else {
+        player.setVelocityX(0);
+      }
+    
       if (cursors.left.isDown) {
         player.setVelocityX(-200);
       } else if (cursors.right.isDown) {
