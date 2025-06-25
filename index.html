@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>顔写真シューティングゲーム（スマホ対応+BGM付き）</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+  <style>
+    body { margin: 0; background: #222; color: white; text-align: center; }
+    #gameContainer { margin: auto; }
+    canvas { touch-action: none; }
+  </style>
+</head>
+<body>
+  <h1>ストロング-K</h1>
+  <p>左右をタップで移動、画面中央タップで弾を撃つ</p>
+  <div id="gameContainer"></div>
+
+  <script>
+    const config = {
+      type: Phaser.AUTO,
+      width: 400,
+      height: 600,
+      parent: 'gameContainer',
+      physics: {
+        default: 'arcade',
+        arcade: { debug: false }
+      },
+      scene: { preload, create, update }
+    };
+
+    let game = new Phaser.Game(config);
+    let player, bullets, enemies, cursors;
+    let lastFired = 0;
+    let score = 0;
+    let scoreText;
+    let bgm;
+
+    function preload() {
+      this.load.image('playerFace', 'player.png');
+      this.load.image('bullet', 'https://labs.phaser.io/assets/sprites/bullet.png');
+      this.load.image('enemy', 'https://labs.phaser.io/assets/sprites/enemy-bullet.png');
+      this.load.audio('bgm', 'bgm.mp3');
+    }
+
+    function create() {
+      player = this.physics.add.sprite(200, 550, 'playerFace').setScale(0.3);
+      player.setCollideWorldBounds(true);
+
+      bullets = this.physics.add.group({ defaultKey: 'bullet', maxSize: 10 });
+      enemies = this.physics.add.group();
+
+      scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
+      cursors = this.input.keyboard.createCursorKeys();
+
+      this.time.addEvent({ delay: 1000, callback: spawnEnemy, callbackScope: this, loop: true });
+      this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
+
+      // BGM 再生
+      bgm = this.sound.add('bgm', { loop: true, volume: 0.5 });
+      bgm.play();
+
+      // タップ操作対応
+      this.input.on('pointerdown', (pointer) => {
+        if (pointer.x < 100) {
+          player.setVelocityX(-200);
+        } else if (pointer.x > 300) {
+          player.setVelocityX(200);
+        } else {
+          shootBullet(this);
+        }
+      });
+
+      this.input.on('pointerup', () => {
+        player.setVelocityX(0);
+      });
+    }
+
+    function update(time) {
+      if (cursors.left.isDown) {
+        player.setVelocityX(-200);
+      } else if (cursors.right.isDown) {
+        player.setVelocityX(200);
+      } else {
+        // スマホ操作に任せる
+      }
+
+      if (cursors.space.isDown && time > lastFired) {
+        shootBullet(this);
+        lastFired = time + 300;
+      }
+
+      bullets.children.each(b => {
+        if (b.active && b.y < 0) {
+          b.setActive(false).setVisible(false).body.enable = false;
+        }
+      });
+
+      enemies.children.each(e => {
+        if (e.active && e.y > 650) {
+          e.setActive(false).setVisible(false).body.enable = false;
+        }
+      });
+    }
+
+    function spawnEnemy() {
+      let x = Phaser.Math.Between(20, 380);
+      let enemy = enemies.get(x, 0, 'enemy');
+      if (!enemy) {
+        enemy = enemies.create(x, 0, 'enemy');
+      } else {
+        enemy.setActive(true).setVisible(true).body.enable = true;
+        enemy.setPosition(x, 0);
+      }
+      enemy.setVelocityY(100);
+    }
+
+    function shootBullet(scene) {
+      let bullet = bullets.get(player.x, player.y - 20);
+      if (bullet) {
+        bullet.setActive(true).setVisible(true).body.enable = true;
+        bullet.setVelocityY(-300);
+      }
+    }
+
+    function hitEnemy(bullet, enemy) {
+      bullet.setActive(false).setVisible(false).body.enable = false;
+      enemy.setActive(false).setVisible(false).body.enable = false;
+      score += 10;
+      scoreText.setText('Score: ' + score);
+    }
+  </script>
+</body>
+</html>
