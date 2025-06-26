@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>避けゲー Ver2</title>
+<title>避けゲー（的画像版）</title>
 <style>
   html, body {
     margin:0; padding:0; height:100%;
@@ -105,6 +105,9 @@
   const scoreDisplay = document.getElementById('score');
   const bgm = document.getElementById('bgm');
 
+  const matoImg = new Image();
+  matoImg.src = 'mato.png';
+
   const playerSize = 40;
   const moveSpeed = 6;
   let gameWidth, gameHeight;
@@ -118,7 +121,7 @@
   const keyState = {up:false, down:false, left:false, right:false};
   const baseSpawnInterval = 1200;
   const enemySpeed = 3;
-  const enemyRadius = 8;
+  const enemySize = 32;
 
   function resizeCanvas() {
     gameWidth = gameArea.clientWidth;
@@ -146,10 +149,10 @@
     const side = Math.floor(Math.random() * 4);
     let ex, ey;
     switch (side) {
-      case 0: ex = Math.random() * gameWidth; ey = -20; break;
-      case 1: ex = gameWidth + 20; ey = Math.random() * gameHeight; break;
-      case 2: ex = Math.random() * gameWidth; ey = gameHeight + 20; break;
-      case 3: ex = -20; ey = Math.random() * gameHeight; break;
+      case 0: ex = Math.random() * gameWidth; ey = -enemySize; break;
+      case 1: ex = gameWidth + enemySize; ey = Math.random() * gameHeight; break;
+      case 2: ex = Math.random() * gameWidth; ey = gameHeight + enemySize; break;
+      case 3: ex = -enemySize; ey = Math.random() * gameHeight; break;
     }
     const px = playerX + playerSize / 2;
     const py = playerY + playerSize / 2;
@@ -158,7 +161,7 @@
     const dist = Math.sqrt(dx*dx + dy*dy);
     const vx = (dx / dist) * enemySpeed;
     const vy = (dy / dist) * enemySpeed;
-    enemies.push({x: ex, y: ey, vx, vy, radius: enemyRadius});
+    enemies.push({x: ex, y: ey, vx, vy});
   }
 
   function updateEnemies() {
@@ -167,26 +170,19 @@
       const e = enemies[i];
       e.x += e.vx;
       e.y += e.vy;
-      // 衝突判定
-      if (checkCollision(e.x, e.y, e.radius, playerX, playerY, playerSize, playerSize)) {
+
+      // 当たり判定（矩形）
+      if (e.x < playerX + playerSize &&
+          e.x + enemySize > playerX &&
+          e.y < playerY + playerSize &&
+          e.y + enemySize > playerY) {
         endGame();
         return;
       }
-      ctx.beginPath();
-      ctx.fillStyle = "#f33";
-      ctx.shadowColor = "#f33";
-      ctx.shadowBlur = 6;
-      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
 
-  function checkCollision(cx, cy, radius, rx, ry, rw, rh) {
-    const closestX = Math.max(rx, Math.min(cx, rx+rw));
-    const closestY = Math.max(ry, Math.min(cy, ry+rh));
-    const dx = cx - closestX;
-    const dy = cy - closestY;
-    return (dx*dx + dy*dy) < (radius*radius);
+      // 的を描画
+      ctx.drawImage(matoImg, e.x, e.y, enemySize, enemySize);
+    }
   }
 
   function movePlayer() {
