@@ -12,20 +12,16 @@
   </style>
 </head>
 <body>
-  <h1>Blizzard-K</h1>
+  <h1>BlizzardK Shooting</h1>
   <p>左右タップで移動、自動で弾を発射。30秒でスコア勝負！</p>
   <div id="gameContainer"></div>
-
   <script>
     const config = {
       type: Phaser.AUTO,
       width: 400,
       height: 600,
       parent: 'gameContainer',
-      physics: {
-        default: 'arcade',
-        arcade: { debug: false }
-      },
+      physics: { default: 'arcade', arcade: { debug: false } },
       scene: { preload, create, update }
     };
 
@@ -35,7 +31,8 @@
     let scoreText, timerText;
     let timeLeft = 30;
     let bgm;
-
+    let leftPressed = false;
+    let rightPressed = false;
     const enemyChars = ['B', 'l', 'i', 'z', 'z', 'a', 'r', 'd', 'K'];
 
     function preload() {
@@ -47,11 +44,9 @@
     function create() {
       player = this.physics.add.sprite(200, 550, 'playerFace').setScale(0.3);
       player.setCollideWorldBounds(true);
-
       bullets = this.physics.add.group({ defaultKey: 'bullet', maxSize: 10 });
-      enemies = this.add.group();
+      enemies = this.physics.add.group();
       cursors = this.input.keyboard.createCursorKeys();
-
       scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
       timerText = this.add.text(280, 10, 'Time: 30', { fontSize: '20px', fill: '#fff' });
 
@@ -61,89 +56,47 @@
         if (timeLeft <= 0) endGame(this);
       }, loop: true });
 
-      this.time.addEvent({ delay: 1000, callback: spawnEnemy, callbackScope: this, loop: true });
+      this.time.addEvent({ delay: 1000, callback: () => spawnEnemy(this), loop: true });
       this.time.addEvent({ delay: 500, callback: () => shootBullet(this), loop: true });
-
       this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
-enemies.runChildUpdate = true;
 
       bgm = this.sound.add('bgm', { loop: true, volume: 0.5 });
       bgm.play();
 
-      
-    let leftPressed = false;
-    let rightPressed = false;
-
-    this.input.on('pointerdown', (pointer) => {
-      if (pointer.x < 200) {
-        leftPressed = true;
-      } else {
-        rightPressed = true;
-      }
-    });
-
-    this.input.on('pointerup', () => {
-      leftPressed = false;
-      rightPressed = false;
-    });
-    
-        if (pointer.x < 200) {
-          player.setVelocityX(-200);
-        } else {
-          player.setVelocityX(200);
-        }
+      this.input.on('pointerdown', (pointer) => {
+        if (pointer.x < 200) { leftPressed = true; } else { rightPressed = true; }
       });
-
-      this.input.on('pointerup', () => {
-        player.setVelocityX(0);
-      });
+      this.input.on('pointerup', () => { leftPressed = false; rightPressed = false; });
     }
 
-    
     function update() {
-      if (leftPressed) {
-        player.setVelocityX(-200);
-      } else if (rightPressed) {
-        player.setVelocityX(200);
-      } else if (cursors.left.isDown) {
-        player.setVelocityX(-200);
-      } else if (cursors.right.isDown) {
-        player.setVelocityX(200);
-      } else {
-        player.setVelocityX(0);
-      }
-    
-      if (cursors.left.isDown) {
-        player.setVelocityX(-200);
-      } else if (cursors.right.isDown) {
-        player.setVelocityX(200);
-      } else {
-        player.setVelocityX(0);
-      }
+      if (leftPressed) player.setVelocityX(-200);
+      else if (rightPressed) player.setVelocityX(200);
+      else if (cursors.left.isDown) player.setVelocityX(-200);
+      else if (cursors.right.isDown) player.setVelocityX(200);
+      else player.setVelocityX(0);
 
       bullets.children.each(b => {
         if (b.active && b.y < 0) b.setActive(false).setVisible(false).body.enable = false;
       });
 
       enemies.children.each(e => {
-        if (e.active && e.y > 650) e.destroy();
+        if (e.active && e.y > 650) { e.setActive(false).setVisible(false).body.enable = false; e.destroy(); }
       });
     }
 
-    function spawnEnemy() {
+    function spawnEnemy(scene) {
       let x = Phaser.Math.Between(20, 360);
       let char = Phaser.Utils.Array.GetRandom(enemyChars);
-
-      let enemy = this.add.text(x, 0, char, {
+      let enemyText = scene.add.text(0, 0, char, {
         fontSize: '32px',
         fill: (char === 'K') ? '#ff4444' : '#ffffff'
       });
-      this.physics.add.existing(enemy);
-      enemy.body.setVelocityY(100);
-      enemy.char = char;
-      enemy.setData('isEnemy', true);
-
-      enemies.add(enemy);
+      enemyText.setPosition(x, 0);
+      scene.physics.add.existing(enemyText);
+      enemyText.body.setVelocityY(100);
+      enemyText.char = char;
+      enemies.add(enemyText);
     }
 
     function shootBullet(scene) {
@@ -156,11 +109,10 @@ enemies.runChildUpdate = true;
 
     function hitEnemy(bullet, enemy) {
       bullet.setActive(false).setVisible(false).body.enable = false;
-      if (enemy.getData('isEnemy')) {
-        enemy.destroy();
-        score += (enemy.char === 'K') ? 100 : 10;
-        scoreText.setText('Score: ' + score);
-      }
+      enemy.setActive(false).setVisible(false).body.enable = false;
+      enemy.destroy();
+      score += (enemy.char === 'K') ? 100 : 10;
+      scoreText.setText('Score: ' + score);
     }
 
     function endGame(scene) {
@@ -185,13 +137,11 @@ enemies.runChildUpdate = true;
       scene.add.text(100, y - 40, '🏆 ランキング 🏆', { fontSize: '24px', fill: '#ff0' });
       records.forEach((entry, i) => {
         scene.add.text(100, y + i * 30, `${i + 1}. ${entry.name} - ${entry.score}点`, {
-          fontSize: '20px',
-          fill: '#fff'
+          fontSize: '20px', fill: '#fff'
         });
       });
       scene.add.text(100, y + records.length * 30 + 40, 'リロードで再プレイ', {
-        fontSize: '16px',
-        fill: '#aaa'
+        fontSize: '16px', fill: '#aaa'
       });
     }
   </script>
