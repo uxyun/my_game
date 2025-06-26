@@ -3,16 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>避けるゲーム（敵16pxサイズ・十字操作）</title>
+<title>避けゲー Ver2</title>
 <style>
   html, body {
     margin:0; padding:0; height:100%;
     background:#222;
-    color:#fff;
     font-family:sans-serif;
+    overflow:hidden;
     user-select:none;
     -webkit-user-select:none;
-    overflow:hidden;
   }
   #gameArea {
     position: relative;
@@ -30,30 +29,28 @@
     font-size: 20px;
     font-weight: bold;
     z-index: 10;
+    color: white;
   }
   #message {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 28px;
+    font-size: 26px;
     color: #0f0;
     display: none;
     z-index: 10;
     text-align: center;
     width: 90%;
   }
-  /* プレイヤー画像 */
   #player {
     position: absolute;
     width: 40px; height: 40px;
-    border-radius: 6px;
     background-image: url('player.png');
     background-size: contain;
     background-repeat: no-repeat;
-    background-position: center center;
+    background-position: center;
     image-rendering: -webkit-optimize-contrast;
   }
-  /* 十字操作ボタン */
   #controlArea {
     width: 160px;
     height: 160px;
@@ -61,25 +58,19 @@
     position: relative;
     background: #111;
     border-radius: 12px;
-    touch-action: none;
-    user-select:none;
   }
   button.dirBtn {
     position: absolute;
     width: 50px; height: 50px;
-    font-size: 28px;
-    font-weight: bold;
-    color: #fff;
+    font-size: 24px;
     background: #444;
+    color: white;
     border: none;
     border-radius: 8px;
-    user-select: none;
-    touch-action: manipulation;
   }
   button.dirBtn:active {
     background: #0af;
   }
-  /* ボタン配置 */
   #upBtn { top: 10px; left: 55px; }
   #downBtn { bottom: 10px; left: 55px; }
   #leftBtn { top: 55px; left: 10px; }
@@ -90,9 +81,9 @@
 
 <div id="gameArea">
   <div id="score">Score: 0.0s</div>
-  <div id="message">画面の方向ボタンで操作、タップでスタート</div>
+  <div id="message">画面タップでスタート</div>
   <div id="player"></div>
-  <canvas id="enemyCanvas" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas>
+  <canvas id="enemyCanvas" style="position:absolute; top:0; left:0;"></canvas>
 </div>
 
 <div id="controlArea">
@@ -107,27 +98,28 @@
 <script>
 (() => {
   const gameArea = document.getElementById('gameArea');
-  const player = document.getElementById('player');
-  const scoreDisplay = document.getElementById('score');
-  const message = document.getElementById('message');
   const canvas = document.getElementById('enemyCanvas');
   const ctx = canvas.getContext('2d');
+  const player = document.getElementById('player');
+  const message = document.getElementById('message');
+  const scoreDisplay = document.getElementById('score');
   const bgm = document.getElementById('bgm');
 
   const playerSize = 40;
-  const moveSpeed = 8;
+  const moveSpeed = 6;
   let gameWidth, gameHeight;
   let playerX, playerY;
   let enemies = [];
-  const enemySpawnInterval = 1200;
-  let lastEnemySpawn = 0;
   let startTime = 0;
-  let score = 0;
+  let lastEnemySpawn = 0;
   let gameRunning = false;
-  const keyState = {up:false, down:false, left:false, right:false};
-  const enemySpeed = 3;
+  let score = 0;
 
-  // canvasをgameAreaサイズに合わせる
+  const keyState = {up:false, down:false, left:false, right:false};
+  const baseSpawnInterval = 1200;
+  const enemySpeed = 3;
+  const enemyRadius = 8;
+
   function resizeCanvas() {
     gameWidth = gameArea.clientWidth;
     gameHeight = gameArea.clientHeight;
@@ -140,28 +132,53 @@
     playerY = (gameHeight - playerSize) / 2;
     updatePlayerPos();
   }
+
   function updatePlayerPos() {
     player.style.left = playerX + 'px';
     player.style.top = playerY + 'px';
   }
 
+  function getDynamicInterval(elapsedSec) {
+    return Math.max(300, baseSpawnInterval - elapsedSec * 50);
+  }
+
   function spawnEnemy() {
-    const side = Math.floor(Math.random()*4);
+    const side = Math.floor(Math.random() * 4);
     let ex, ey;
-    switch(side) {
-      case 0: ex = Math.random()*gameWidth; ey = -20; break;
-      case 1: ex = gameWidth + 20; ey = Math.random()*gameHeight; break;
-      case 2: ex = Math.random()*gameWidth; ey = gameHeight + 20; break;
-      case 3: ex = -20; ey = Math.random()*gameHeight; break;
+    switch (side) {
+      case 0: ex = Math.random() * gameWidth; ey = -20; break;
+      case 1: ex = gameWidth + 20; ey = Math.random() * gameHeight; break;
+      case 2: ex = Math.random() * gameWidth; ey = gameHeight + 20; break;
+      case 3: ex = -20; ey = Math.random() * gameHeight; break;
     }
-    const px = playerX + playerSize/2;
-    const py = playerY + playerSize/2;
+    const px = playerX + playerSize / 2;
+    const py = playerY + playerSize / 2;
     const dx = px - ex;
     const dy = py - ey;
     const dist = Math.sqrt(dx*dx + dy*dy);
     const vx = (dx / dist) * enemySpeed;
     const vy = (dy / dist) * enemySpeed;
-    enemies.push({x:ex, y:ey, vx, vy, radius:16});
+    enemies.push({x: ex, y: ey, vx, vy, radius: enemyRadius});
+  }
+
+  function updateEnemies() {
+    ctx.clearRect(0, 0, gameWidth, gameHeight);
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      e.x += e.vx;
+      e.y += e.vy;
+      // 衝突判定
+      if (checkCollision(e.x, e.y, e.radius, playerX, playerY, playerSize, playerSize)) {
+        endGame();
+        return;
+      }
+      ctx.beginPath();
+      ctx.fillStyle = "#f33";
+      ctx.shadowColor = "#f33";
+      ctx.shadowBlur = 6;
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   function checkCollision(cx, cy, radius, rx, ry, rw, rh) {
@@ -172,135 +189,104 @@
     return (dx*dx + dy*dy) < (radius*radius);
   }
 
-  function updateEnemies() {
-    ctx.clearRect(0, 0, gameWidth, gameHeight);
-    const px = playerX + playerSize/2;
-    const py = playerY + playerSize/2;
-    for(let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      e.x += e.vx;
-      e.y += e.vy;
-      if(checkCollision(e.x, e.y, e.radius, playerX, playerY, playerSize, playerSize)) {
-        endGame();
-        return;
-      }
-      if(e.x < -20 || e.x > gameWidth + 20 || e.y < -20 || e.y > gameHeight + 20) {
-        enemies.splice(i, 1);
-        continue;
-      }
-      ctx.beginPath();
-      ctx.fillStyle = '#f33';
-      ctx.shadowColor = '#f33';
-      ctx.shadowBlur = 10;
-      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
   function movePlayer() {
-    if(keyState.up) playerY -= moveSpeed;
-    if(keyState.down) playerY += moveSpeed;
-    if(keyState.left) playerX -= moveSpeed;
-    if(keyState.right) playerX += moveSpeed;
-
-    if(playerX < 0) playerX = 0;
-    if(playerY < 0) playerY = 0;
-    if(playerX > gameWidth - playerSize) playerX = gameWidth - playerSize;
-    if(playerY > gameHeight - playerSize) playerY = gameHeight - playerSize;
-
+    if (keyState.up) playerY -= moveSpeed;
+    if (keyState.down) playerY += moveSpeed;
+    if (keyState.left) playerX -= moveSpeed;
+    if (keyState.right) playerX += moveSpeed;
+    playerX = Math.max(0, Math.min(gameWidth - playerSize, playerX));
+    playerY = Math.max(0, Math.min(gameHeight - playerSize, playerY));
     updatePlayerPos();
   }
 
   function updateScore() {
     const now = performance.now();
     score = ((now - startTime) / 1000).toFixed(1);
-    scoreDisplay.textContent = 'Score: ' + score + 's';
+    scoreDisplay.textContent = `Score: ${score}s`;
   }
 
   function gameLoop() {
-    if(!gameRunning) return;
-    movePlayer();
-    updateEnemies();
-    updateScore();
+    if (!gameRunning) return;
     const now = performance.now();
-    if(now - lastEnemySpawn > enemySpawnInterval) {
+    const elapsed = (now - startTime) / 1000;
+    const currentInterval = getDynamicInterval(elapsed);
+
+    if (now - lastEnemySpawn > currentInterval) {
       spawnEnemy();
       lastEnemySpawn = now;
     }
+
+    movePlayer();
+    updateEnemies();
+    updateScore();
+
     requestAnimationFrame(gameLoop);
   }
 
   function startGame() {
-    if(gameRunning) return;
-    message.style.display = 'none';
+    if (gameRunning) return;
     enemies = [];
-    lastEnemySpawn = 0;
     startTime = performance.now();
-    score = 0;
+    lastEnemySpawn = 0;
     gameRunning = true;
+    resizeCanvas();
     resetPlayer();
+    message.style.display = 'none';
     bgm.currentTime = 0;
-    bgm.play().catch(() => {
-      console.log('BGM再生にユーザー操作が必要です');
-    });
+    bgm.play().catch(() => {});
     requestAnimationFrame(gameLoop);
   }
 
   function endGame() {
     gameRunning = false;
-    message.textContent = `ゲームオーバー！スコア: ${score}s 画面タップで再スタート`;
+    bgm.pause();
+    message.textContent = `ゲームオーバー！\nスコア: ${score}s\nタップで再スタート`;
     message.style.display = 'block';
     enemies = [];
     ctx.clearRect(0, 0, gameWidth, gameHeight);
-    bgm.pause();
   }
 
-  function setupButtons() {
+  function setupControls() {
     const map = {
-      upBtn: 'up',
-      downBtn: 'down',
-      leftBtn: 'left',
-      rightBtn: 'right',
+      upBtn: "up",
+      downBtn: "down",
+      leftBtn: "left",
+      rightBtn: "right"
     };
-    Object.entries(map).forEach(([id, key]) => {
+    for (let id in map) {
+      const key = map[id];
       const btn = document.getElementById(id);
-      btn.addEventListener('touchstart', e => {
+      btn.addEventListener("touchstart", e => {
         e.preventDefault();
         keyState[key] = true;
       }, {passive:false});
-      btn.addEventListener('touchend', e => {
+      btn.addEventListener("touchend", e => {
         e.preventDefault();
         keyState[key] = false;
       }, {passive:false});
-      btn.addEventListener('mousedown', e => {
-        e.preventDefault();
+      btn.addEventListener("mousedown", e => {
         keyState[key] = true;
       });
-      btn.addEventListener('mouseup', e => {
-        e.preventDefault();
+      btn.addEventListener("mouseup", e => {
         keyState[key] = false;
       });
-      btn.addEventListener('mouseleave', e => {
+      btn.addEventListener("mouseleave", e => {
         keyState[key] = false;
       });
-    });
+    }
   }
 
-  gameArea.addEventListener('click', () => {
-    if(!gameRunning) startGame();
-  });
-  gameArea.addEventListener('touchstart', () => {
-    if(!gameRunning) startGame();
-  });
+  gameArea.addEventListener("touchstart", () => { if (!gameRunning) startGame(); });
+  gameArea.addEventListener("click", () => { if (!gameRunning) startGame(); });
 
-  window.addEventListener('resize', () => {
+  window.addEventListener("resize", () => {
     resizeCanvas();
     resetPlayer();
   });
 
   resizeCanvas();
   resetPlayer();
-  setupButtons();
+  setupControls();
   message.style.display = 'block';
 
 })();
