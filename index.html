@@ -89,7 +89,6 @@
 
       enemies.children.each(e => {
         if (e.active && e.y > game.scale.height + 50) {
-          e.setActive(false).setVisible(false).body.enable = false;
           e.destroy();
         }
       });
@@ -98,17 +97,16 @@
     function spawnEnemy(scene) {
       let x = Phaser.Math.Between(40, scene.scale.width - 40);
       let char = Phaser.Utils.Array.GetRandom(enemyChars);
-      let text = scene.add.text(0, 0, char, {
+      let text = scene.add.text(x, 0, char, {
         fontSize: '32px',
         fill: (char === 'K') ? '#ff4444' : '#ffffff'
       });
-
-      let box = scene.add.rectangle(0, 0, text.width, text.height, 0x000000, 0); // 透明のヒットボックス
-      let container = scene.add.container(x, 0, [box, text]);
-      scene.physics.add.existing(container);
-      container.body.setVelocityY(100);
-      container.char = char;
-      enemies.add(container);
+      scene.physics.add.existing(text);
+      text.body.setVelocityY(100);
+      text.body.setCollideWorldBounds(false);
+      text.body.allowGravity = false;
+      text.setData('char', char);
+      enemies.add(text);
     }
 
     function shootBullet(scene) {
@@ -121,39 +119,17 @@
 
     function hitEnemy(bullet, enemy) {
       bullet.setActive(false).setVisible(false).body.enable = false;
-      enemy.setActive(false).setVisible(false).body.enable = false;
       enemy.destroy();
-      score += (enemy.char === 'K') ? 100 : 10;
+      const char = enemy.getData('char');
+      score += (char === 'K') ? 100 : 10;
       scoreText.setText('Score: ' + score);
     }
 
     function endGame(scene) {
       scene.physics.pause();
       bgm.stop();
-      const playerName = prompt('ゲーム終了！名前を入力してね：', 'Player');
-      if (playerName) saveScore(playerName, score);
-      showRanking(scene);
-    }
-
-    function saveScore(name, score) {
-      let records = JSON.parse(localStorage.getItem('shooting_ranking')) || [];
-      records.push({ name, score });
-      records.sort((a, b) => b.score - a.score);
-      records = records.slice(0, 5);
-      localStorage.setItem('shooting_ranking', JSON.stringify(records));
-    }
-
-    function showRanking(scene) {
-      let records = JSON.parse(localStorage.getItem('shooting_ranking')) || [];
-      let y = 200;
-      scene.add.text(100, y - 40, '🏆 ランキング 🏆', { fontSize: '24px', fill: '#ff0' });
-      records.forEach((entry, i) => {
-        scene.add.text(100, y + i * 30, `${i + 1}. ${entry.name} - ${entry.score}点`, {
-          fontSize: '20px', fill: '#fff'
-        });
-      });
-      scene.add.text(100, y + records.length * 30 + 40, 'リロードで再プレイ', {
-        fontSize: '16px', fill: '#aaa'
+      scene.add.text(scene.scale.width / 2 - 80, scene.scale.height / 2, 'ゲーム終了！', {
+        fontSize: '32px', fill: '#ff0'
       });
     }
   </script>
