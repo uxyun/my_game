@@ -1,138 +1,183 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BlizzardK Shooting</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
-  <style>
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #222; }
-    #gameContainer { width: 100vw; height: 100vh; }
-    canvas { touch-action: none; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>タイミングタップゲーム</title>
+<style>
+  body, html {
+    margin:0; padding:0; overflow:hidden;
+    background: #222;
+    color: #fff;
+    font-family: sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #gameArea {
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: #000;
+  }
+  #target {
+    position: absolute;
+    top: 50%;
+    width: 80px;
+    height: 80px;
+    transform: translateY(-50%);
+    transition: box-shadow 0.2s ease;
+  }
+  #target.glow {
+    box-shadow: 0 0 15px 8px #fff;
+  }
+  #score {
+    position: absolute;
+    top: 20px; left: 20px;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  #message {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    color: #0f0;
+    display: none;
+  }
+</style>
 </head>
 <body>
-  <div id="gameContainer"></div>
-  <script>
-    const config = {
-      type: Phaser.AUTO,
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        parent: 'gameContainer',
-        width: window.innerWidth,
-        height: window.innerHeight,
-      },
-      physics: { default: 'arcade', arcade: { debug: false } },
-      scene: { preload, create, update }
-    };
 
-    let game = new Phaser.Game(config);
-    let player, bullets, enemies, cursors;
-    let score = 0;
-    let scoreText, timerText;
-    let timeLeft = 30;
-    let bgm;
-    let leftPressed = false;
-    let rightPressed = false;
-    const enemyChars = ['B', 'l', 'i', 'z', 'z', 'a', 'r', 'd', 'K'];
+<div id="gameArea">
+  <img id="target" src="player.png" alt="的" style="left: 100vw;">
+  <div id="score">Score: 0</div>
+  <div id="message">ゲーム終了！</div>
+</div>
 
-    function preload() {
-      this.load.image('playerFace', 'player.png');
-      this.load.image('bullet', 'https://labs.phaser.io/assets/sprites/bullet.png');
-      this.load.audio('bgm', 'bgm.mp3');
+<audio id="bgm" src="bgm.mp3"></audio>
+
+<script>
+(() => {
+  const target = document.getElementById('target');
+  const scoreDisplay = document.getElementById('score');
+  const message = document.getElementById('message');
+  const bgm = document.getElementById('bgm');
+
+  let score = 0;
+  let gameRunning = false;
+
+  // 的の移動パラメータ
+  const speed = 200; // px/秒
+  const targetWidth = 80;
+
+  let startTime = 0;
+  let animationFrameId = null;
+
+  // 的の初期位置：画面右端の外
+  function resetTarget() {
+    target.style.left = window.innerWidth + 'px';
+    target.classList.remove('glow');
+  }
+
+  // タップ判定の範囲(px)
+  const hitRange = 40;
+
+  // ゲーム開始
+  function startGame() {
+    score = 0;
+    scoreDisplay.textContent = 'Score: 0';
+    message.style.display = 'none';
+    resetTarget();
+    startTime = performance.now();
+    gameRunning = true;
+
+    // BGMを再生
+    bgm.currentTime = 0;
+    bgm.play().catch(() => {
+      // iPhoneは自動再生できないので、最初のタップまで待つ
+      console.log('BGM再生にユーザー操作が必要です');
+    });
+
+    // 移動開始
+    animationFrameId = requestAnimationFrame(gameLoop);
+  }
+
+  // ゲーム終了処理
+  function endGame() {
+    gameRunning = false;
+    cancelAnimationFrame(animationFrameId);
+    message.style.display = 'block';
+  }
+
+  // ゲームループ（的を左へ移動）
+  function gameLoop(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = (timestamp - startTime) / 1000; // 秒経過
+
+    // 的の現在X座標（右端から左へ）
+    let posX = window.innerWidth - elapsed * speed;
+
+    if (posX < -targetWidth) {
+      // 的が画面外左へ抜けたらリセット（次の的を出す）
+      startTime = timestamp;
+      posX = window.innerWidth;
+      target.classList.remove('glow');
     }
 
-    function create() {
-      const centerX = this.scale.width / 2;
-      const bottomY = this.scale.height - 50;
-      player = this.physics.add.sprite(centerX, bottomY, 'playerFace').setScale(0.3);
-      player.setCollideWorldBounds(true);
-      bullets = this.physics.add.group({ defaultKey: 'bullet', maxSize: 10 });
-      enemies = this.physics.add.group();
-      cursors = this.input.keyboard.createCursorKeys();
-      scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
-      timerText = this.add.text(this.scale.width - 120, 10, 'Time: 30', { fontSize: '20px', fill: '#fff' });
+    target.style.left = posX + 'px';
 
-      this.time.addEvent({ delay: 1000, callback: () => {
-        timeLeft--;
-        timerText.setText('Time: ' + timeLeft);
-        if (timeLeft <= 0) endGame(this);
-      }, loop: true });
+    if (gameRunning) {
+      animationFrameId = requestAnimationFrame(gameLoop);
+    }
+  }
 
-      this.time.addEvent({ delay: 1000, callback: () => spawnEnemy(this), loop: true });
-      this.time.addEvent({ delay: 500, callback: () => shootBullet(this), loop: true });
-      this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
-
-      bgm = this.sound.add('bgm', { loop: true, volume: 0.5 });
-      bgm.play();
-
-      this.input.on('pointerdown', (pointer) => {
-        if (pointer.x < this.scale.width / 2) leftPressed = true;
-        else rightPressed = true;
-      });
-      this.input.on('pointerup', () => {
-        leftPressed = false;
-        rightPressed = false;
-      });
+  // タップ時の判定
+  function onTap(evt) {
+    if (!gameRunning) {
+      startGame();
+      return;
     }
 
-    function update() {
-      if (leftPressed) player.setVelocityX(-200);
-      else if (rightPressed) player.setVelocityX(200);
-      else if (cursors.left.isDown) player.setVelocityX(-200);
-      else if (cursors.right.isDown) player.setVelocityX(200);
-      else player.setVelocityX(0);
+    // タップ座標取得
+    let tapX = evt.touches ? evt.touches[0].clientX : evt.clientX;
 
-      bullets.children.each(b => {
-        if (b.active && b.y < 0) b.setActive(false).setVisible(false).body.enable = false;
-      });
+    // 的の位置と判定
+    const targetRect = target.getBoundingClientRect();
+    const targetCenterX = targetRect.left + targetRect.width / 2;
 
-      enemies.children.each(e => {
-        if (e.active && e.y > game.scale.height + 50) {
-          e.destroy();
-        }
-      });
+    // 判定範囲内ならヒット
+    if (Math.abs(tapX - targetCenterX) <= hitRange) {
+      score++;
+      scoreDisplay.textContent = 'Score: ' + score;
+
+      // 光らせる
+      target.classList.add('glow');
+      setTimeout(() => {
+        target.classList.remove('glow');
+      }, 200);
     }
+  }
 
-    function spawnEnemy(scene) {
-      let x = Phaser.Math.Between(40, scene.scale.width - 40);
-      let char = Phaser.Utils.Array.GetRandom(enemyChars);
+  // BGM終了でゲーム終了
+  bgm.addEventListener('ended', () => {
+    endGame();
+  });
 
-      let text = scene.add.text(0, 0, char, {
-        fontSize: '32px',
-        fill: (char === 'K') ? '#ff4444' : '#ffffff'
-      });
-      let hitbox = scene.add.rectangle(0, 0, text.width, text.height, 0x000000, 0);
-      let container = scene.add.container(x, 0, [hitbox, text]);
-      scene.physics.add.existing(container);
-      container.body.setVelocityY(100);
-      container.body.setSize(text.width, text.height);
-      container.char = char;
-      enemies.add(container);
-    }
+  // 初回は画面タップでゲームスタート
+  document.getElementById('gameArea').addEventListener('click', onTap);
+  document.getElementById('gameArea').addEventListener('touchstart', onTap);
 
-    function shootBullet(scene) {
-      let bullet = bullets.get(player.x, player.y - 20);
-      if (bullet) {
-        bullet.setActive(true).setVisible(true).body.enable = true;
-        bullet.setVelocityY(-300);
-      }
-    }
+  // 画面リサイズ時の的再配置
+  window.addEventListener('resize', () => {
+    if (gameRunning) resetTarget();
+  });
 
-    function hitEnemy(bullet, enemy) {
-      bullet.setActive(false).setVisible(false).body.enable = false;
-      enemy.destroy();
-      score += (enemy.char === 'K') ? 100 : 10;
-      scoreText.setText('Score: ' + score);
-    }
+  // 最初はゲーム開始せず、タップでスタートを待つ
+  message.textContent = '画面タップでスタート';
+  message.style.display = 'block';
+})();
+</script>
 
-    function endGame(scene) {
-      scene.physics.pause();
-      bgm.stop();
-      scene.add.text(scene.scale.width / 2 - 80, scene.scale.height / 2, 'ゲーム終了！', {
-        fontSize: '32px', fill: '#ff0'
-      });
-    }
-  </script>
 </body>
 </html>
