@@ -1,26 +1,27 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>BlizzardK Shooting</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
   <style>
-    body { margin: 0; background: #222; color: white; text-align: center; }
-    #gameContainer { margin: auto; }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #222; }
+    #gameContainer { width: 100vw; height: 100vh; }
     canvas { touch-action: none; }
   </style>
 </head>
 <body>
-  <h1>BlizzardK Shooting</h1>
-  <p>左右タップで移動、自動で弾を発射。30秒でスコア勝負！</p>
   <div id="gameContainer"></div>
   <script>
     const config = {
       type: Phaser.AUTO,
-      width: 400,
-      height: 600,
-      parent: 'gameContainer',
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        parent: 'gameContainer',
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
       physics: { default: 'arcade', arcade: { debug: false } },
       scene: { preload, create, update }
     };
@@ -42,13 +43,15 @@
     }
 
     function create() {
-      player = this.physics.add.sprite(200, 550, 'playerFace').setScale(0.3);
+      const centerX = this.scale.width / 2;
+      const bottomY = this.scale.height - 50;
+      player = this.physics.add.sprite(centerX, bottomY, 'playerFace').setScale(0.3);
       player.setCollideWorldBounds(true);
       bullets = this.physics.add.group({ defaultKey: 'bullet', maxSize: 10 });
       enemies = this.physics.add.group();
       cursors = this.input.keyboard.createCursorKeys();
       scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
-      timerText = this.add.text(280, 10, 'Time: 30', { fontSize: '20px', fill: '#fff' });
+      timerText = this.add.text(this.scale.width - 120, 10, 'Time: 30', { fontSize: '20px', fill: '#fff' });
 
       this.time.addEvent({ delay: 1000, callback: () => {
         timeLeft--;
@@ -64,9 +67,13 @@
       bgm.play();
 
       this.input.on('pointerdown', (pointer) => {
-        if (pointer.x < 200) { leftPressed = true; } else { rightPressed = true; }
+        if (pointer.x < this.scale.width / 2) leftPressed = true;
+        else rightPressed = true;
       });
-      this.input.on('pointerup', () => { leftPressed = false; rightPressed = false; });
+      this.input.on('pointerup', () => {
+        leftPressed = false;
+        rightPressed = false;
+      });
     }
 
     function update() {
@@ -81,22 +88,27 @@
       });
 
       enemies.children.each(e => {
-        if (e.active && e.y > 650) { e.setActive(false).setVisible(false).body.enable = false; e.destroy(); }
+        if (e.active && e.y > game.scale.height + 50) {
+          e.setActive(false).setVisible(false).body.enable = false;
+          e.destroy();
+        }
       });
     }
 
     function spawnEnemy(scene) {
-      let x = Phaser.Math.Between(20, 360);
+      let x = Phaser.Math.Between(40, scene.scale.width - 40);
       let char = Phaser.Utils.Array.GetRandom(enemyChars);
-      let enemyText = scene.add.text(0, 0, char, {
+      let text = scene.add.text(0, 0, char, {
         fontSize: '32px',
         fill: (char === 'K') ? '#ff4444' : '#ffffff'
       });
-      enemyText.setPosition(x, 0);
-      scene.physics.add.existing(enemyText);
-      enemyText.body.setVelocityY(100);
-      enemyText.char = char;
-      enemies.add(enemyText);
+
+      let box = scene.add.rectangle(0, 0, text.width, text.height, 0x000000, 0); // 透明のヒットボックス
+      let container = scene.add.container(x, 0, [box, text]);
+      scene.physics.add.existing(container);
+      container.body.setVelocityY(100);
+      container.char = char;
+      enemies.add(container);
     }
 
     function shootBullet(scene) {
