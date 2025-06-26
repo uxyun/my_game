@@ -3,39 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>タイミングタップゲーム</title>
+<title>避けるゲーム（方向ボタン版）</title>
 <style>
-  body, html {
-    margin:0; padding:0; overflow:hidden;
-    background: #222;
-    color: #fff;
-    font-family: sans-serif;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: manipulation;
+  html, body {
+    margin:0; padding:0; height:100%;
+    background:#222;
+    color:#fff;
+    font-family:sans-serif;
+    user-select:none;
+    -webkit-user-select:none;
+    overflow:hidden;
   }
   #gameArea {
     position: relative;
-    width: 100vw; height: 100vh;
-    overflow: hidden;
+    width: 100vw; height: 80vh;
     background: #000;
-  }
-  #target {
-    position: absolute;
-    top: 50%;
-    width: 80px;
-    height: 80px;
-    transform: translateY(-50%);
-    transition: box-shadow 0.2s ease;
-  }
-  #target.glow {
-    box-shadow: 0 0 15px 8px #fff;
+    overflow: hidden;
+    touch-action: none;
   }
   #score {
     position: absolute;
-    top: 20px; left: 20px;
-    font-size: 24px;
+    top: 8px; left: 12px;
+    font-size: 20px;
     font-weight: bold;
+    z-index: 10;
   }
   #message {
     position: absolute;
@@ -44,138 +35,319 @@
     font-size: 28px;
     color: #0f0;
     display: none;
+    z-index: 10;
+  }
+  /* プレイヤー表示 */
+  #player {
+    position: absolute;
+    width: 40px; height: 40px;
+    background: #0af;
+    border-radius: 6px;
+  }
+  /* 方向ボタンエリア */
+  #controlArea {
+    width: 100vw;
+    height: 20vh;
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  button.dirBtn {
+    width: 50px; height: 50px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+    background: #444;
+    border: none;
+    border-radius: 8px;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  button.dirBtn:active {
+    background: #0af;
   }
 </style>
 </head>
 <body>
 
 <div id="gameArea">
-  <img id="target" src="player.png" alt="的" style="left: 100vw;">
-  <div id="score">Score: 0</div>
-  <div id="message">ゲーム終了！</div>
+  <div id="score">Score: 0.0s</div>
+  <div id="message">画面の方向ボタンで操作、タップでスタート</div>
+  <div id="player"></div>
+  <canvas id="enemyCanvas" width="0" height="0" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas>
 </div>
 
-<audio id="bgm" src="bgm.mp3"></audio>
+<div id="controlArea">
+  <button class="dirBtn" id="upBtn">↑</button>
+  <button class="dirBtn" id="leftBtn">←</button>
+  <button class="dirBtn" id="downBtn">↓</button>
+  <button class="dirBtn" id="rightBtn">→</button>
+</div>
+
+<audio id="bgm" src="bgm.mp3" loop></audio>
 
 <script>
 (() => {
-  const target = document.getElementById('target');
+  const gameArea = document.getElementById('gameArea');
+  const player = document.getElementById('player');
   const scoreDisplay = document.getElementById('score');
   const message = document.getElementById('message');
+  const canvas = document.getElementById('enemyCanvas');
+  const ctx = canvas.getContext('2d');
   const bgm = document.getElementById('bgm');
 
+  // プレイヤーサイズ
+  const playerSize = 40;
+  // 移動速度(ピクセル/フレーム)
+  const moveSpeed = 8;
+
+  // ゲーム領域サイズ
+  let gameWidth, gameHeight;
+
+  // プレイヤー位置（左上座標）
+  let playerX, playerY;
+
+  // 敵（的）情報配列
+  // {x, y, vx, vy, radius}
+  let enemies = [];
+
+  // 敵生成間隔(ms)
+  const enemySpawnInterval = 1200;
+  let lastEnemySpawn = 0;
+
+  // スコア計測
+  let startTime = 0;
   let score = 0;
   let gameRunning = false;
 
-  // 的の移動パラメータ
-  const speed = 200; // px/秒
-  const targetWidth = 80;
+  // キー押下フラグ（スマホはボタン）
+  const keyState = {up:false, down:false, left:false, right:false};
 
-  let startTime = 0;
-  let animationFrameId = null;
+  // 敵の移動速度（px/frame）
+  const enemySpeed = 3;
 
-  // 的の初期位置：画面右端の外
-  function resetTarget() {
-    target.style.left = window.innerWidth + 'px';
-    target.classList.remove('glow');
+  // canvasリサイズ
+  function resizeCanvas() {
+    gameWidth = gameArea.clientWidth;
+    gameHeight = gameArea.clientHeight;
+    canvas.width = gameWidth;
+    canvas.height = gameHeight;
   }
 
-  // タップ判定の範囲(px)
-  const hitRange = 40;
+  // プレイヤー初期配置（画面中央）
+  function resetPlayer() {
+    playerX = (gameWidth - playerSize) / 2;
+    playerY = (gameHeight - playerSize) / 2;
+    updatePlayerPos();
+  }
+  function updatePlayerPos() {
+    player.style.left = playerX + 'px';
+    player.style.top = playerY + 'px';
+  }
+
+  // 敵生成（4辺いずれかからプレイヤーに向かう）
+  function spawnEnemy() {
+    const side = Math.floor(Math.random()*4); // 0=上 1=右 2=下 3=左
+    let ex, ey;
+    switch(side) {
+      case 0: // 上
+        ex = Math.random()*gameWidth;
+        ey = -20;
+        break;
+      case 1: // 右
+        ex = gameWidth + 20;
+        ey = Math.random()*gameHeight;
+        break;
+      case 2: // 下
+        ex = Math.random()*gameWidth;
+        ey = gameHeight + 20;
+        break;
+      case 3: // 左
+        ex = -20;
+        ey = Math.random()*gameHeight;
+        break;
+    }
+    // プレイヤー中心座標
+    const px = playerX + playerSize/2;
+    const py = playerY + playerSize/2;
+    // 方向ベクトル
+    const dx = px - ex;
+    const dy = py - ey;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const vx = (dx / dist) * enemySpeed;
+    const vy = (dy / dist) * enemySpeed;
+    enemies.push({x:ex, y:ey, vx, vy, radius:12});
+  }
+
+  // 衝突判定（円と四角）
+  function checkCollision(cx, cy, radius, rx, ry, rw, rh) {
+    // 円の中心と四角の最近接点を求める
+    const closestX = Math.max(rx, Math.min(cx, rx+rw));
+    const closestY = Math.max(ry, Math.min(cy, ry+rh));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return (dx*dx + dy*dy) < (radius*radius);
+  }
+
+  // 敵描画と移動更新
+  function updateEnemies() {
+    ctx.clearRect(0, 0, gameWidth, gameHeight);
+    const px = playerX + playerSize/2;
+    const py = playerY + playerSize/2;
+
+    for(let i=enemies.length-1; i>=0; i--) {
+      const e = enemies[i];
+      e.x += e.vx;
+      e.y += e.vy;
+
+      // 衝突判定
+      if(checkCollision(e.x, e.y, e.radius, playerX, playerY, playerSize, playerSize)) {
+        endGame();
+        return;
+      }
+
+      // 画面外に出た敵は削除（生存判定のためスコアに加算）
+      if(e.x < -30 || e.x > gameWidth+30 || e.y < -30 || e.y > gameHeight+30) {
+        enemies.splice(i,1);
+        continue;
+      }
+
+      // 敵描画（丸）
+      ctx.beginPath();
+      ctx.fillStyle = '#f33';
+      ctx.shadowColor = '#f33';
+      ctx.shadowBlur = 8;
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // プレイヤー移動
+  function movePlayer() {
+    if(keyState.up) playerY -= moveSpeed;
+    if(keyState.down) playerY += moveSpeed;
+    if(keyState.left) playerX -= moveSpeed;
+    if(keyState.right) playerX += moveSpeed;
+
+    // 画面内制限
+    if(playerX < 0) playerX = 0;
+    if(playerY < 0) playerY = 0;
+    if(playerX > gameWidth - playerSize) playerX = gameWidth - playerSize;
+    if(playerY > gameHeight - playerSize) playerY = gameHeight - playerSize;
+
+    updatePlayerPos();
+  }
+
+  // スコア更新
+  function updateScore() {
+    const now = performance.now();
+    score = ((now - startTime)/1000).toFixed(1);
+    scoreDisplay.textContent = 'Score: ' + score + 's';
+  }
+
+  // ゲームループ
+  function gameLoop() {
+    if(!gameRunning) return;
+
+    movePlayer();
+    updateEnemies();
+    updateScore();
+
+    // 敵生成
+    const now = performance.now();
+    if(now - lastEnemySpawn > enemySpawnInterval) {
+      spawnEnemy();
+      lastEnemySpawn = now;
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
 
   // ゲーム開始
   function startGame() {
-    score = 0;
-    scoreDisplay.textContent = 'Score: 0';
+    if(gameRunning) return;
     message.style.display = 'none';
-    resetTarget();
+    enemies = [];
+    lastEnemySpawn = 0;
     startTime = performance.now();
+    score = 0;
     gameRunning = true;
+    resetPlayer();
 
-    // BGMを再生
     bgm.currentTime = 0;
     bgm.play().catch(() => {
-      // iPhoneは自動再生できないので、最初のタップまで待つ
       console.log('BGM再生にユーザー操作が必要です');
     });
 
-    // 移動開始
-    animationFrameId = requestAnimationFrame(gameLoop);
+    requestAnimationFrame(gameLoop);
   }
 
-  // ゲーム終了処理
+  // ゲーム終了
   function endGame() {
     gameRunning = false;
-    cancelAnimationFrame(animationFrameId);
+    message.textContent = `ゲームオーバー！スコア: ${score}s 画面タップで再スタート`;
     message.style.display = 'block';
+    enemies = [];
+    ctx.clearRect(0, 0, gameWidth, gameHeight);
+    bgm.pause();
   }
 
-  // ゲームループ（的を左へ移動）
-  function gameLoop(timestamp) {
-    if (!startTime) startTime = timestamp;
-    const elapsed = (timestamp - startTime) / 1000; // 秒経過
-
-    // 的の現在X座標（右端から左へ）
-    let posX = window.innerWidth - elapsed * speed;
-
-    if (posX < -targetWidth) {
-      // 的が画面外左へ抜けたらリセット（次の的を出す）
-      startTime = timestamp;
-      posX = window.innerWidth;
-      target.classList.remove('glow');
-    }
-
-    target.style.left = posX + 'px';
-
-    if (gameRunning) {
-      animationFrameId = requestAnimationFrame(gameLoop);
-    }
+  // ボタン押し時の処理
+  function setupButtons() {
+    const map = {
+      upBtn: 'up',
+      downBtn: 'down',
+      leftBtn: 'left',
+      rightBtn: 'right',
+    };
+    Object.entries(map).forEach(([id, key]) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        keyState[key] = true;
+      }, {passive:false});
+      btn.addEventListener('touchend', e => {
+        e.preventDefault();
+        keyState[key] = false;
+      }, {passive:false});
+      btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        keyState[key] = true;
+      });
+      btn.addEventListener('mouseup', e => {
+        e.preventDefault();
+        keyState[key] = false;
+      });
+      btn.addEventListener('mouseleave', e => {
+        keyState[key] = false;
+      });
+    });
   }
 
-  // タップ時の判定
-  function onTap(evt) {
-    if (!gameRunning) {
-      startGame();
-      return;
-    }
-
-    // タップ座標取得
-    let tapX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-
-    // 的の位置と判定
-    const targetRect = target.getBoundingClientRect();
-    const targetCenterX = targetRect.left + targetRect.width / 2;
-
-    // 判定範囲内ならヒット
-    if (Math.abs(tapX - targetCenterX) <= hitRange) {
-      score++;
-      scoreDisplay.textContent = 'Score: ' + score;
-
-      // 光らせる
-      target.classList.add('glow');
-      setTimeout(() => {
-        target.classList.remove('glow');
-      }, 200);
-    }
-  }
-
-  // BGM終了でゲーム終了
-  bgm.addEventListener('ended', () => {
-    endGame();
+  // 画面タップでゲーム開始（または再開）
+  gameArea.addEventListener('click', () => {
+    if(!gameRunning) startGame();
+  });
+  gameArea.addEventListener('touchstart', () => {
+    if(!gameRunning) startGame();
   });
 
-  // 初回は画面タップでゲームスタート
-  document.getElementById('gameArea').addEventListener('click', onTap);
-  document.getElementById('gameArea').addEventListener('touchstart', onTap);
-
-  // 画面リサイズ時の的再配置
+  // 初期セットアップ
   window.addEventListener('resize', () => {
-    if (gameRunning) resetTarget();
+    resizeCanvas();
+    resetPlayer();
   });
 
-  // 最初はゲーム開始せず、タップでスタートを待つ
-  message.textContent = '画面タップでスタート';
+  // 初期呼び出し
+  resizeCanvas();
+  resetPlayer();
+  setupButtons();
   message.style.display = 'block';
+
 })();
 </script>
 
