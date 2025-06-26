@@ -97,16 +97,18 @@
     function spawnEnemy(scene) {
       let x = Phaser.Math.Between(40, scene.scale.width - 40);
       let char = Phaser.Utils.Array.GetRandom(enemyChars);
-      let text = scene.add.text(x, 0, char, {
+
+      let text = scene.add.text(0, 0, char, {
         fontSize: '32px',
         fill: (char === 'K') ? '#ff4444' : '#ffffff'
       });
-      scene.physics.add.existing(text);
-      text.body.setVelocityY(100);
-      text.body.setCollideWorldBounds(false);
-      text.body.allowGravity = false;
-      text.setData('char', char);
-      enemies.add(text);
+      let hitbox = scene.add.rectangle(0, 0, text.width, text.height, 0x000000, 0);
+      let container = scene.add.container(x, 0, [hitbox, text]);
+      scene.physics.add.existing(container);
+      container.body.setVelocityY(100);
+      container.body.setSize(text.width, text.height);
+      container.char = char;
+      enemies.add(container);
     }
 
     function shootBullet(scene) {
@@ -120,8 +122,7 @@
     function hitEnemy(bullet, enemy) {
       bullet.setActive(false).setVisible(false).body.enable = false;
       enemy.destroy();
-      const char = enemy.getData('char');
-      score += (char === 'K') ? 100 : 10;
+      score += (enemy.char === 'K') ? 100 : 10;
       scoreText.setText('Score: ' + score);
     }
 
