@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>避けるゲーム（方向ボタン版）</title>
+<meta name="viewport" content="width=375, height=812, initial-scale=1, user-scalable=no" />
+<title>避けるゲーム（iPhone11対応）</title>
 <style>
   html, body {
     margin:0; padding:0; height:100%;
@@ -16,10 +16,12 @@
   }
   #gameArea {
     position: relative;
-    width: 100vw; height: 80vh;
+    width: 375px;
+    height: 812px;
     background: #000;
     overflow: hidden;
     touch-action: none;
+    margin: 0 auto;
   }
   #score {
     position: absolute;
@@ -36,18 +38,23 @@
     color: #0f0;
     display: none;
     z-index: 10;
+    text-align: center;
+    width: 90%;
   }
-  /* プレイヤー表示 */
+  /* プレイヤー画像 */
   #player {
     position: absolute;
     width: 40px; height: 40px;
-    background: #0af;
     border-radius: 6px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center center;
+    image-rendering: -webkit-optimize-contrast;
   }
   /* 方向ボタンエリア */
   #controlArea {
-    width: 100vw;
-    height: 20vh;
+    width: 375px;
+    height: 100px;
     background: #111;
     display: flex;
     justify-content: center;
@@ -78,7 +85,7 @@
   <div id="score">Score: 0.0s</div>
   <div id="message">画面の方向ボタンで操作、タップでスタート</div>
   <div id="player"></div>
-  <canvas id="enemyCanvas" width="0" height="0" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas>
+  <canvas id="enemyCanvas" width="375" height="812" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas>
 </div>
 
 <div id="controlArea">
@@ -105,8 +112,9 @@
   // 移動速度(ピクセル/フレーム)
   const moveSpeed = 8;
 
-  // ゲーム領域サイズ
-  let gameWidth, gameHeight;
+  // ゲーム領域サイズ（固定）
+  const gameWidth = 375;
+  const gameHeight = 812;
 
   // プレイヤー位置（左上座標）
   let playerX, playerY;
@@ -130,13 +138,8 @@
   // 敵の移動速度（px/frame）
   const enemySpeed = 3;
 
-  // canvasリサイズ
-  function resizeCanvas() {
-    gameWidth = gameArea.clientWidth;
-    gameHeight = gameArea.clientHeight;
-    canvas.width = gameWidth;
-    canvas.height = gameHeight;
-  }
+  // プレイヤー画像設定
+  player.style.backgroundImage = "url('player.png')";
 
   // プレイヤー初期配置（画面中央）
   function resetPlayer() {
@@ -180,12 +183,11 @@
     const dist = Math.sqrt(dx*dx + dy*dy);
     const vx = (dx / dist) * enemySpeed;
     const vy = (dy / dist) * enemySpeed;
-    enemies.push({x:ex, y:ey, vx, vy, radius:12});
+    enemies.push({x:ex, y:ey, vx, vy, radius:4}); // 半径4pxで的を小さく
   }
 
   // 衝突判定（円と四角）
   function checkCollision(cx, cy, radius, rx, ry, rw, rh) {
-    // 円の中心と四角の最近接点を求める
     const closestX = Math.max(rx, Math.min(cx, rx+rw));
     const closestY = Math.max(ry, Math.min(cy, ry+rh));
     const dx = cx - closestX;
@@ -210,8 +212,8 @@
         return;
       }
 
-      // 画面外に出た敵は削除（生存判定のためスコアに加算）
-      if(e.x < -30 || e.x > gameWidth+30 || e.y < -30 || e.y > gameHeight+30) {
+      // 画面外に出た敵は削除
+      if(e.x < -10 || e.x > gameWidth+10 || e.y < -10 || e.y > gameHeight+10) {
         enemies.splice(i,1);
         continue;
       }
@@ -220,7 +222,7 @@
       ctx.beginPath();
       ctx.fillStyle = '#f33';
       ctx.shadowColor = '#f33';
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 6;
       ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
       ctx.fill();
     }
@@ -257,7 +259,6 @@
     updateEnemies();
     updateScore();
 
-    // 敵生成
     const now = performance.now();
     if(now - lastEnemySpawn > enemySpawnInterval) {
       spawnEnemy();
@@ -338,12 +339,11 @@
 
   // 初期セットアップ
   window.addEventListener('resize', () => {
-    resizeCanvas();
+    // iPhone 11向けなのでサイズは固定、resizeは特に処理しない
     resetPlayer();
   });
 
   // 初期呼び出し
-  resizeCanvas();
   resetPlayer();
   setupButtons();
   message.style.display = 'block';
